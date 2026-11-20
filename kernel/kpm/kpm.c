@@ -256,12 +256,8 @@ noinline int sukisu_handle_kpm(unsigned long control_code, unsigned long arg1,
     }
 
 exit:
-    {
-        int __ctu = copy_to_user((void __user *)result_code, &res, sizeof(res));
-        if (__ctu != 0)
-            pr_info("kpm: dbg copy_to_user failed rc=%llx ptr=%llx res=%d\n",
-                    (unsigned long long)result_code, (unsigned long long)result_code, res);
-    }
+    if (copy_to_user(result_code, &res, sizeof(res)) != 0)
+        pr_info("kpm: Copy to user failed.");
 
     return 0;
 invalid_arg:

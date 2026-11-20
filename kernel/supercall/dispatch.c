@@ -1044,9 +1044,9 @@ static const struct ksu_ioctl_cmd_map ksu_ioctl_handlers[] = {
     },
 #ifdef CONFIG_KPM
     { 
-        .cmd = KSU_IOCTL_KPM_V43,
-        .name = "KPM_OPERATION_V43",
-        .handler = do_kpm,
+        .cmd = KSU_IOCTL_EXTENSION,
+        .name = "EXTENSION",
+        .handler = do_extension,
         .perm_check = manager_or_root
     },
     {

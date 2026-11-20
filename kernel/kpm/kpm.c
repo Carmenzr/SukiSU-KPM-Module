@@ -310,45 +310,81 @@ struct kpm_ext_payload {
 
 /* 4.3.0+ hands KPM through the unified extension ioctl instead of a
  * dedicated command number; unwrap it here and reuse the same core. */
+struct kpm_ext_entry {
+    __u32 id;
+    const char *name;
+};
+
+/* Extensions this kernel advertises to a 4.3.0 manager. KPM is real; the
+ * others are lightweight handlers so the manager can offer their pages. */
+static const struct kpm_ext_entry kpm_ext_entries[] = {
+    { 0, "kpm" },
+    { 3, "dynamic_manager" },
+    { 4, "susfs" },
+    { 5, "version_spoof" },
+};
+
+static const struct kpm_ext_entry *kpm_ext_find(__u32 id)
+{
+    size_t i;
+
+    for (i = 0; i < ARRAY_SIZE(kpm_ext_entries); i++) {
+        if (kpm_ext_entries[i].id == id)
+            return &kpm_ext_entries[i];
+    }
+    return NULL;
+}
+
 int do_extension(void __user *arg)
 {
     struct ksu_extension_cmd ext;
+    const struct kpm_ext_entry *ent;
 
     if (copy_from_user(&ext, arg, sizeof(ext)))
         return -EFAULT;
 
-    if (ext.id == KSU_EXTENSION_ABI_PROBE_ID) {
+    if (ext.id == KSU_EXTENSION_ABI_PROBE_ID &&
+        ext.op == KSU_EXTENSION_ABI) {
         ext.supported = 1;
         ext.api_version = KSU_EXTENSION_API_VERSION;
         ext.value = 0;
         return copy_to_user(arg, &ext, sizeof(ext)) ? -EFAULT : 0;
     }
 
-    if (ext.id == KSU_EXTENSION_ABI_PROBE_ID && ext.op == KSU_EXTENSION_ENUM) {
+    if (ext.id == KSU_EXTENSION_ABI_PROBE_ID &&
+        ext.op == KSU_EXTENSION_ENUM) {
         struct ksu_extension_desc desc;
+        __u32 index = (__u32)ext.value;
+
         if (!ext.user_ptr)
             return -EINVAL;
-        if (ext.value != 0)
+        if (index >= ARRAY_SIZE(kpm_ext_entries))
             return -ENOENT;
         memset(&desc, 0, sizeof(desc));
-        desc.id = 0;
+        desc.id = kpm_ext_entries[index].id;
         desc.caps = 1; /* KSU_FEATURE_FLAG_SUPPORTED */
         desc.min_api_version = 0;
         desc.forced = 0;
-        strscpy(desc.name, "kpm", sizeof(desc.name));
-        return copy_to_user(u64_to_user_ptr(ext.user_ptr), &desc, sizeof(desc)) ? -EFAULT : 0;
+        strscpy(desc.name, kpm_ext_entries[index].name, sizeof(desc.name));
+        return copy_to_user(u64_to_user_ptr(ext.user_ptr), &desc,
+                            sizeof(desc)) ? -EFAULT : 0;
     }
 
-    if (ext.id != 0)
+    ent = kpm_ext_find(ext.id);
+    if (!ent)
         return -EOPNOTSUPP;
 
     if (ext.op == KSU_EXTENSION_GET) {
         ext.supported = 1;
         ext.api_version = KSU_EXTENSION_API_VERSION;
+        ext.value = (ext.id == 4) ? 1 : 0; /* susfs: present via guard LKM */
         return copy_to_user(arg, &ext, sizeof(ext)) ? -EFAULT : 0;
     }
 
-    if (ext.op != KSU_EXTENSION_IO)
+    if (ext.op == KSU_EXTENSION_SET)
+        return 0;
+
+    if (ext.op != KSU_EXTENSION_IO || ext.id != 0)
         return -EOPNOTSUPP;
 
     if (!ext.user_ptr)
@@ -356,7 +392,8 @@ int do_extension(void __user *arg)
 
     {
         struct kpm_ext_payload p;
-        if (copy_from_user(&p, (void __user *)(unsigned long)ext.user_ptr, sizeof(p)))
+
+        if (copy_from_user(&p, u64_to_user_ptr(ext.user_ptr), sizeof(p)))
             return -EFAULT;
 
         return sukisu_handle_kpm((unsigned long)p.control_code,

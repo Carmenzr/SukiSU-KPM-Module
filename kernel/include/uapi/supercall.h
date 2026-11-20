@@ -211,6 +211,15 @@ struct ksu_extension_cmd {
 #define KSU_EXTENSION_IO  3u
 #define KSU_EXTENSION_ABI 5u
 #define KSU_EXTENSION_ABI_PROBE_ID 0xFFFFFFFFu
+#define KSU_EXTENSION_ENUM 6u
+#define KSU_EXTENSION_NAME_LEN 32
+struct ksu_extension_desc {
+    __u32 id;
+    __u32 caps;
+    __u32 min_api_version;
+    __u32 forced;
+    char name[KSU_EXTENSION_NAME_LEN];
+};
 #define KSU_EXTENSION_API_VERSION 2u
 /* IOCTL command definitions */
 static const __u32 KSU_IOCTL_GRANT_ROOT = _IOC(_IOC_NONE, 'K', 1, 0);

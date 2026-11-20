@@ -324,6 +324,21 @@ int do_extension(void __user *arg)
         return copy_to_user(arg, &ext, sizeof(ext)) ? -EFAULT : 0;
     }
 
+    if (ext.id == KSU_EXTENSION_ABI_PROBE_ID && ext.op == KSU_EXTENSION_ENUM) {
+        struct ksu_extension_desc desc;
+        if (!ext.user_ptr)
+            return -EINVAL;
+        if (ext.value != 0)
+            return -ENOENT;
+        memset(&desc, 0, sizeof(desc));
+        desc.id = 0;
+        desc.caps = 1; /* KSU_FEATURE_FLAG_SUPPORTED */
+        desc.min_api_version = 0;
+        desc.forced = 0;
+        strscpy(desc.name, "kpm", sizeof(desc.name));
+        return copy_to_user(u64_to_user_ptr(ext.user_ptr), &desc, sizeof(desc)) ? -EFAULT : 0;
+    }
+
     if (ext.id != 0)
         return -EOPNOTSUPP;
 

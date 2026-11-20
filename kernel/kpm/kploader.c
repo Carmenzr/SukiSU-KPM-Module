@@ -63,7 +63,13 @@ static inline unsigned long symbol_lookup_name(const char *name)
     unsigned long addr = (unsigned long)ksu_resolve_symbol_for_functable_hook(name);
     if (addr)
         return addr;
-    return sukisu_compact_find_symbol(name);
+    addr = sukisu_compact_find_symbol(name);
+    if (addr)
+        return addr;
+    /* GKI names the module-visible printk entry _printk. */
+    if (!strcmp(name, "printk"))
+        return (unsigned long)ksu_resolve_symbol_for_functable_hook("_printk");
+    return 0;
 }
 
 /*

@@ -24,7 +24,7 @@ jobs:
     - name: Build kernelsu.ko with KPM enabled
       run: |
         KMI=${{ matrix.kmi }}
-        WS=${{ github.workspace }}
+        WS=$(git rev-parse --show-toplevel)
         git config --global --add safe.directory "$WS"
         cd kernel
         SRC=/opt/ddk/src/$KMI
@@ -81,5 +81,5 @@ jobs:
       uses: actions/upload-artifact@v7
       with:
         name: kernelsu-kpm-${{ matrix.kmi }}
-        path: ${{ github.workspace }}/out/${{ matrix.kmi }}_kernelsu_kpm.ko
+        path: out/${{ matrix.kmi }}_kernelsu_kpm.ko
         if-no-files-found: error

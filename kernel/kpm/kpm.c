@@ -354,11 +354,7 @@ int do_extension(void __user *arg)
         struct kpm_ext_payload p;
         if (copy_from_user(&p, (void __user *)(unsigned long)ext.user_ptr, sizeof(p)))
             return -EFAULT;
-        pr_info("kpm: ext cc=%llu a1=%llx a2=%llx rc=%llx\n",
-                (unsigned long long)p.control_code,
-                (unsigned long long)p.arg1,
-                (unsigned long long)p.arg2,
-                (unsigned long long)p.result_code);
+
         return sukisu_handle_kpm((unsigned long)p.control_code,
                                  (unsigned long)p.arg1,
                                  (unsigned long)p.arg2,

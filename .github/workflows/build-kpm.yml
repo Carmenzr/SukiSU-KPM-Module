@@ -24,8 +24,8 @@ jobs:
     - name: Build kernelsu.ko with KPM enabled
       run: |
         KMI=${{ matrix.kmi }}
+        git config --global --add safe.directory '*'
         WS=$(git rev-parse --show-toplevel)
-        git config --global --add safe.directory "$WS"
         cd kernel
         SRC=/opt/ddk/src/$KMI
         KDIR=/opt/ddk/kdir/$KMI

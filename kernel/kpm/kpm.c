@@ -310,3 +310,57 @@ __visible int do_kpm(void __user *arg)
     return sukisu_handle_kpm(cmd.control_code, cmd.arg1, cmd.arg2,
                              cmd.result_code);
 }
+
+struct kpm_ext_payload {
+    __u64 control_code;
+    __u64 arg1;
+    __u64 arg2;
+    __u64 result_code;
+};
+
+/* 4.3.0+ hands KPM through the unified extension ioctl instead of a
+ * dedicated command number; unwrap it here and reuse the same core. */
+int do_extension(void __user *arg)
+{
+    struct ksu_extension_cmd ext;
+
+    if (copy_from_user(&ext, arg, sizeof(ext)))
+        return -EFAULT;
+
+    if (ext.id == KSU_EXTENSION_ABI_PROBE_ID) {
+        ext.supported = 1;
+        ext.api_version = KSU_EXTENSION_API_VERSION;
+        ext.value = 0;
+        return copy_to_user(arg, &ext, sizeof(ext)) ? -EFAULT : 0;
+    }
+
+    if (ext.id != 0)
+        return -EOPNOTSUPP;
+
+    if (ext.op == KSU_EXTENSION_GET) {
+        ext.supported = 1;
+        ext.api_version = KSU_EXTENSION_API_VERSION;
+        return copy_to_user(arg, &ext, sizeof(ext)) ? -EFAULT : 0;
+    }
+
+    if (ext.op != KSU_EXTENSION_IO)
+        return -EOPNOTSUPP;
+
+    if (!ext.user_ptr)
+        return -EINVAL;
+
+    {
+        struct kpm_ext_payload p;
+        if (copy_from_user(&p, (void __user *)(unsigned long)ext.user_ptr, sizeof(p)))
+            return -EFAULT;
+        pr_info("kpm: ext cc=%llu a1=%llx a2=%llx rc=%llx\n",
+                (unsigned long long)p.control_code,
+                (unsigned long long)p.arg1,
+                (unsigned long long)p.arg2,
+                (unsigned long long)p.result_code);
+        return sukisu_handle_kpm((unsigned long)p.control_code,
+                                 (unsigned long)p.arg1,
+                                 (unsigned long)p.arg2,
+                                 (unsigned long)p.result_code);
+    }
+}

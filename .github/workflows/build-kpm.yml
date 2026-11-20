@@ -81,4 +81,5 @@ jobs:
       uses: actions/upload-artifact@v7
       with:
         name: kernelsu-kpm-${{ matrix.kmi }}
-        path: out/${{ matrix.kmi }}_kernelsu_kpm.ko
+        path: ${{ github.workspace }}/out/${{ matrix.kmi }}_kernelsu_kpm.ko
+        if-no-files-found: error

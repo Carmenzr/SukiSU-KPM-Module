@@ -256,8 +256,12 @@ noinline int sukisu_handle_kpm(unsigned long control_code, unsigned long arg1,
     }
 
 exit:
-    if (copy_to_user(result_code, &res, sizeof(res)) != 0)
-        pr_info("kpm: Copy to user failed.");
+    {
+        int __ctu = copy_to_user((void __user *)result_code, &res, sizeof(res));
+        if (__ctu != 0)
+            pr_info("kpm: dbg copy_to_user failed rc=%llx ptr=%llx res=%d\n",
+                    (unsigned long long)result_code, (unsigned long long)result_code, res);
+    }
 
     return 0;
 invalid_arg:
@@ -283,7 +287,13 @@ __visible int do_kpm(void __user *arg)
     if (copy_from_user(&cmd, arg, sizeof(cmd))) {
         pr_err("kpm: copy_from_user failed\n");
         return -EFAULT;
-    }
+    }    pr_info("kpm: dbg arg=%px cc=%llu a1=%llx a2=%llx rc=%llx pid=%d\n",
+            arg,
+            (unsigned long long)cmd.control_code,
+            (unsigned long long)cmd.arg1,
+            (unsigned long long)cmd.arg2,
+            (unsigned long long)cmd.result_code,
+            current->pid);
 
     if (!access_ok(cmd.control_code, sizeof(int))) {
         pr_err("kpm: invalid control_code pointer %px\n",

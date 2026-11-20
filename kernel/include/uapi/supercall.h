@@ -232,5 +232,6 @@ static const __u32 KSU_IOCTL_LIST_TRY_UMOUNT = _IOC(_IOC_READ | _IOC_WRITE, 'K',
 static const __u32 KSU_IOCTL_SET_SPOOF_VERSION = _IOC(_IOC_WRITE, 'K', 104, 0);
 static const __u32 KSU_IOCTL_SET_SPOOF_CPU = _IOC(_IOC_WRITE, 'K', 105, 0);
 static const __u32 KSU_IOCTL_KPM = _IOC(_IOC_READ | _IOC_WRITE, 'K', 200, 0);
+static const __u32 KSU_IOCTL_KPM_V43 = _IOWR('K', 44, struct ksu_kpm_cmd);
 
 #endif

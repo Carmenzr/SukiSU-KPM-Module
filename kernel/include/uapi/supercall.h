@@ -196,6 +196,22 @@ struct ksu_kpm_cmd {
     __aligned_u64 __user result_code;
 };
 
+/* Unified extension ioctl (4.3.0+): id/op envelope around the KPM payload. */
+struct ksu_extension_cmd {
+    __u32 id;
+    __u32 op;
+    __u32 supported;
+    __u32 api_version;
+    __u64 value;
+    __u64 user_ptr;
+};
+
+#define KSU_EXTENSION_GET 1u
+#define KSU_EXTENSION_SET 2u
+#define KSU_EXTENSION_IO  3u
+#define KSU_EXTENSION_ABI 5u
+#define KSU_EXTENSION_ABI_PROBE_ID 0xFFFFFFFFu
+#define KSU_EXTENSION_API_VERSION 2u
 /* IOCTL command definitions */
 static const __u32 KSU_IOCTL_GRANT_ROOT = _IOC(_IOC_NONE, 'K', 1, 0);
 static const __u32 KSU_IOCTL_GET_INFO = _IOR('K', 2, struct ksu_get_info_cmd);
@@ -232,6 +248,6 @@ static const __u32 KSU_IOCTL_LIST_TRY_UMOUNT = _IOC(_IOC_READ | _IOC_WRITE, 'K',
 static const __u32 KSU_IOCTL_SET_SPOOF_VERSION = _IOC(_IOC_WRITE, 'K', 104, 0);
 static const __u32 KSU_IOCTL_SET_SPOOF_CPU = _IOC(_IOC_WRITE, 'K', 105, 0);
 static const __u32 KSU_IOCTL_KPM = _IOC(_IOC_READ | _IOC_WRITE, 'K', 200, 0);
-static const __u32 KSU_IOCTL_KPM_V43 = _IOWR('K', 44, struct ksu_kpm_cmd);
+static const __u32 KSU_IOCTL_EXTENSION = _IOC(_IOC_READ | _IOC_WRITE, 'K', 300, sizeof(struct ksu_extension_cmd));
 
 #endif

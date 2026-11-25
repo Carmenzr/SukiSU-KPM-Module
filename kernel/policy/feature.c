@@ -69,14 +69,6 @@ int ksu_unregister_feature_handler(u32 feature_id)
     int ret = 0;
 
     if (feature_id >= KSU_FEATURE_MAX) {
-        struct ksu_feature_compat *compat = feature_compat_find(feature_id);
-
-        if (compat) {
-            pr_info("feature: compat id %u set to %llu (accepted, not enforced)\n",
-                    feature_id, value);
-            compat->value = value;
-            return 0;
-        }
         pr_err("feature: invalid feature_id %u\n", feature_id);
         return -EINVAL;
     }

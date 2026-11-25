@@ -396,6 +396,24 @@ int do_extension(void __user *arg)
         if (copy_from_user(&p, u64_to_user_ptr(ext.user_ptr), sizeof(p)))
             return -EFAULT;
 
+        /* 4.3.0 sends SUKISU_KPM_LOAD_EVENT (8) with a {args, event} pair instead of a
+         * plain args string. Fold it back into the 4.2.0 core's LOAD shape. */
+        if (p.control_code == 8) {
+            struct {
+                __u64 args;
+                __u64 event;
+            } ev;
+
+            if (!p.arg2)
+                return -EINVAL;
+            if (copy_from_user(&ev, u64_to_user_ptr(p.arg2), sizeof(ev)))
+                return -EFAULT;
+
+            return sukisu_handle_kpm(1, (unsigned long)p.arg1,
+                                     (unsigned long)ev.args,
+                                     (unsigned long)p.result_code);
+        }
+
         return sukisu_handle_kpm((unsigned long)p.control_code,
                                  (unsigned long)p.arg1,
                                  (unsigned long)p.arg2,

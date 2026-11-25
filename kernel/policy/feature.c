@@ -5,6 +5,31 @@
 
 static const struct ksu_feature_handler *feature_handlers[KSU_FEATURE_MAX];
 
+/* Feature IDs the 4.3.0 manager knows but this 4.2.0-based kernel does not
+ * implement. They are accepted and remembered so the manager's config pages do
+ * not fail with a rejected command; the behaviour itself is not enforced. */
+struct ksu_feature_compat {
+    u32 id;
+    u64 value;
+};
+
+static struct ksu_feature_compat feature_compat[] = {
+    { 6, 0 },      /* shell_su_adb_only */
+    { 16, 0 },     /* mount_hide */
+    { 10003, 0 },  /* avc_spoof */
+};
+
+static struct ksu_feature_compat *feature_compat_find(u32 id)
+{
+    size_t i;
+
+    for (i = 0; i < ARRAY_SIZE(feature_compat); i++) {
+        if (feature_compat[i].id == id)
+            return &feature_compat[i];
+    }
+    return NULL;
+}
+
 static DEFINE_MUTEX(feature_mutex);
 
 int __init ksu_register_feature_handler(const struct ksu_feature_handler *handler)
@@ -44,6 +69,14 @@ int ksu_unregister_feature_handler(u32 feature_id)
     int ret = 0;
 
     if (feature_id >= KSU_FEATURE_MAX) {
+        struct ksu_feature_compat *compat = feature_compat_find(feature_id);
+
+        if (compat) {
+            pr_info("feature: compat id %u set to %llu (accepted, not enforced)\n",
+                    feature_id, value);
+            compat->value = value;
+            return 0;
+        }
         pr_err("feature: invalid feature_id %u\n", feature_id);
         return -EINVAL;
     }
@@ -71,6 +104,13 @@ int ksu_get_feature(u32 feature_id, u64 *value, bool *supported)
     const struct ksu_feature_handler *handler;
 
     if (feature_id >= KSU_FEATURE_MAX) {
+        struct ksu_feature_compat *compat = feature_compat_find(feature_id);
+
+        if (compat && value && supported) {
+            *supported = true;
+            *value = compat->value;
+            return 0;
+        }
         pr_err("feature: invalid feature_id %u\n", feature_id);
         return -EINVAL;
     }
@@ -115,6 +155,14 @@ int ksu_set_feature(u32 feature_id, u64 value)
     const struct ksu_feature_handler *handler;
 
     if (feature_id >= KSU_FEATURE_MAX) {
+        struct ksu_feature_compat *compat = feature_compat_find(feature_id);
+
+        if (compat) {
+            pr_info("feature: compat id %u set to %llu (accepted, not enforced)\n",
+                    feature_id, value);
+            compat->value = value;
+            return 0;
+        }
         pr_err("feature: invalid feature_id %u\n", feature_id);
         return -EINVAL;
     }

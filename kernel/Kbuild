@@ -85,7 +85,10 @@ kernelsu-objs += kpm/kplo.o
 # hook_engine.o and hook_runtime.o are standalone objects.
 kernelsu-objs += kpm/kphook/hook_engine.o
 kernelsu-objs += kpm/kphook/hook_runtime.o
-kernelsu-objs += kpm/kphook/hmem.o
+# NOTE: hmem.c from upstream KernelPatch is the kpimg heap manager; the LKM
+# port in hook_runtime.c defines hook_mem_{zalloc,free,get_from_origin}
+# itself (list_head-based), so compiling hmem.o would duplicate those
+# symbols. Keep the source file around for reference but do NOT link it.
 ccflags-y += -I$(KSU_KERNEL_DIR)/kpm/kphook -I$(KSU_KERNEL_DIR)/kpm/kphook/include
 
 ccflags-y += -I$(srctree)/security/selinux -I$(srctree)/security/selinux/include

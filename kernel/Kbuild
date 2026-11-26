@@ -80,6 +80,14 @@ kernelsu-objs += kpm/super_access.o
 kernelsu-objs += kpm/kploader.o
 kernelsu-objs += kpm/kplo.o
 
+# KernelPatch inline-hook runtime ported from bmax121/KernelPatch (kernel/base
+# + lkm/hook). hook.c is pulled in by hook_engine.c via #include, so only
+# hook_engine.o and hook_runtime.o are standalone objects.
+kernelsu-objs += kpm/kphook/hook_engine.o
+kernelsu-objs += kpm/kphook/hook_runtime.o
+kernelsu-objs += kpm/kphook/hmem.o
+ccflags-y += -I$(KSU_KERNEL_DIR)/kpm/kphook -I$(KSU_KERNEL_DIR)/kpm/kphook/include
+
 ccflags-y += -I$(srctree)/security/selinux -I$(srctree)/security/selinux/include
 ccflags-y += -I$(objtree)/security/selinux -include $(srctree)/include/uapi/asm-generic/errno.h
 

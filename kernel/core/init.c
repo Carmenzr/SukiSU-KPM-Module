@@ -27,6 +27,7 @@
 #include "feature/selinux_hide.h"
 #include "feature/uts_spoof.h"
 #include "infra/symbol_resolver.h"
+#include "kpm/kphook/hook_runtime.h"
 
 #if defined(__x86_64__) && !defined(CONFIG_KSU_X86_PATCH_SYSCALL_DISPATCHER)
 #include <asm/cpufeature.h>
@@ -134,6 +135,12 @@ int __init kernelsu_init(void)
     }
 
     ksu_init_symbol_resolver();
+
+    /* KernelPatch inline-hook runtime: must resolve module_alloc / set_memory_x
+     * from kallsyms before any KPM calls hook_wrap(). Non-fatal on failure —
+     * KPMs that don't use inline-hook (e.g. demo-hello) still load. */
+    if (kp_hook_runtime_init())
+        pr_warn("kpm: hook runtime init failed; inline-hook KPMs will not load\n");
 
     if (spoof_release || spoof_version) {
         ksu_spoof_version(spoof_release, spoof_version);

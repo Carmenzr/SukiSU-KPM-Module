@@ -138,6 +138,40 @@ static int kpm_has_syscall_wrapper(void)
     return 1;
 }
 
+/*
+ * Inline-hook runtime wiring. hook_wrap / unhook live in the ported
+ * KernelPatch base kernel/kpm/kphook/hook.c (included via hook_engine.c).
+ * KPMs also ask for fp_wrap_syscalln / fp_unwrap_syscalln as separate UND
+ * symbols; the LKM port maps them onto hook_wrap(sys_call_table[nr]) —
+ * same approach as bmax121/KernelPatch's lkm/kpm/symbols.c.
+ */
+#include "kphook/include/hook.h"
+#include "kphook/hook_runtime.h"
+
+static void **kpm_sys_call_table;
+
+static int kpm_resolve_sys_call_table(void)
+{
+    if (!kpm_sys_call_table)
+        kpm_sys_call_table = (void **)find_kernel_symbol_exact("sys_call_table");
+    return kpm_sys_call_table ? 0 : -ENOENT;
+}
+
+static int kpm_fp_wrap_syscalln(int nr, int narg, void *before, void *after,
+                                void *udata)
+{
+    if (kpm_resolve_sys_call_table())
+        return -ENOENT;
+    return hook_wrap(kpm_sys_call_table[nr], narg, before, after, udata);
+}
+
+static void kpm_fp_unwrap_syscalln(int nr, void *before, void *after)
+{
+    if (kpm_resolve_sys_call_table())
+        return;
+    hook_unwrap(kpm_sys_call_table[nr], before, after);
+}
+
 struct CompactAddressSymbol {
     const char *symbol_name;
     void *addr;
@@ -167,6 +201,10 @@ static struct CompactAddressSymbol address_symbol[] = {
     { "kf_strlen", &kpm_kf_strlen },
     { "current_uid", &kpm_current_uid },
     { "has_syscall_wrapper", &kpm_has_syscall_wrapper },
+    { "hook_wrap", &hook_wrap },
+    { "unhook", &unhook },
+    { "fp_wrap_syscalln", &kpm_fp_wrap_syscalln },
+    { "fp_unwrap_syscalln", &kpm_fp_unwrap_syscalln },
 };
 
 unsigned long sukisu_compact_find_symbol(const char *name)

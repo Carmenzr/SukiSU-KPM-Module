@@ -360,19 +360,31 @@ static int simplify_symbols(struct kpm_module *mod, struct kpm_load_info *info)
         case SHN_UNDEF:
             if (!sym[i].st_name)
                 break;
-            /* Integer-value symbols first: KernelPatch exposes thread_size,
-             * sp_el0_is_current, etc. as `extern int`. The compiler emits
-             * MOVW_UABS_G*_NC reloc pairs that read sym.st_value directly as
-             * the baked-in immediate. No slot indirection — the ADDRESS of a
-             * slot makes no sense here, we need the VALUE. */
+            /* Integer-value symbols: KernelPatch exposes thread_size,
+             * sp_el0_is_current, etc. as `extern int`. KPMs compiled with
+             * -fno-pic emit `adrp xN, sym; ldr wN, [xN, #:lo12:sym]` to read
+             * them (reloc pair 275 + LDST32/LDST64_ABS_LO12_NC). The symbol
+             * value therefore needs to be a MEMORY SLOT whose CONTENTS are
+             * the integer value — same storage as pointer-variable form,
+             * just a different payload.
+             *
+             * Note: an earlier revision set st_value = raw value here on the
+             * assumption KPMs used MOVW_UABS_G*_NC. Not what clang actually
+             * emits in -fno-pic for `extern int`, so that version crashed in
+             * apply_relocations with -ENOEXEC. */
             {
                 unsigned long val;
-                /* sym.st_value is Elf64_Addr (unsigned long long on some
-                 * builds); use a staging long so compact.h's prototype
-                 * stays plain `unsigned long *`. */
                 if (sukisu_compact_find_value(name, &val)) {
-                    sym[i].st_value = (Elf64_Addr)val;
-                    pr_info("kpm: symbol %s (value) -> %#lx\n", name, val);
+                    if (!info->ptr_slots || info->slot_used >= info->n_slots) {
+                        ret = -ENOMEM;
+                        break;
+                    }
+                    info->ptr_slots[info->slot_used] = val;
+                    sym[i].st_value =
+                        (unsigned long)&info->ptr_slots[info->slot_used];
+                    info->slot_used++;
+                    pr_info("kpm: symbol %s (value in slot) -> %px = %#lx\n",
+                            name, (void *)sym[i].st_value, val);
                     break;
                 }
             }

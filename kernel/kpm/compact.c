@@ -157,19 +157,38 @@ static int kpm_resolve_sys_call_table(void)
     return kpm_sys_call_table ? 0 : -ENOENT;
 }
 
+#include <linux/delay.h>
+
 static int kpm_fp_wrap_syscalln(int nr, int narg, void *before, void *after,
                                 void *udata)
 {
-    if (kpm_resolve_sys_call_table())
+    int rc;
+    pr_emerg("kpm: fp_wrap_syscalln enter nr=%d narg=%d before=%px after=%px\n",
+             nr, narg, before, after);
+    mdelay(50);
+    if (kpm_resolve_sys_call_table()) {
+        pr_emerg("kpm: fp_wrap_syscalln sys_call_table=NULL\n");
+        mdelay(50);
         return -ENOENT;
-    return hook_wrap(kpm_sys_call_table[nr], narg, before, after, udata);
+    }
+    pr_emerg("kpm: fp_wrap_syscalln table=%px target=%px calling hook_wrap\n",
+             kpm_sys_call_table, kpm_sys_call_table[nr]);
+    mdelay(50);
+    rc = hook_wrap(kpm_sys_call_table[nr], narg, before, after, udata);
+    pr_emerg("kpm: fp_wrap_syscalln returned rc=%d\n", rc);
+    mdelay(50);
+    return rc;
 }
 
 static void kpm_fp_unwrap_syscalln(int nr, void *before, void *after)
 {
+    pr_emerg("kpm: fp_unwrap_syscalln enter nr=%d\n", nr);
+    mdelay(50);
     if (kpm_resolve_sys_call_table())
         return;
     hook_unwrap(kpm_sys_call_table[nr], before, after);
+    pr_emerg("kpm: fp_unwrap_syscalln returned\n");
+    mdelay(50);
 }
 
 struct CompactAddressSymbol {

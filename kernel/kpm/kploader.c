@@ -360,6 +360,16 @@ static int simplify_symbols(struct kpm_module *mod, struct kpm_load_info *info)
         case SHN_UNDEF:
             if (!sym[i].st_name)
                 break;
+            /* Integer-value symbols first: KernelPatch exposes thread_size,
+             * sp_el0_is_current, etc. as `extern int`. The compiler emits
+             * MOVW_UABS_G*_NC reloc pairs that read sym.st_value directly as
+             * the baked-in immediate. No slot indirection — the ADDRESS of a
+             * slot makes no sense here, we need the VALUE. */
+            if (sukisu_compact_find_value(name, &sym[i].st_value)) {
+                pr_info("kpm: symbol %s (value) -> %#lx\n", name,
+                        (unsigned long)sym[i].st_value);
+                break;
+            }
             addr = symbol_lookup_name(name);
             if (!addr) {
                 logke("unknown symbol: %s\n", name);

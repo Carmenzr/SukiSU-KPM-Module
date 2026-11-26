@@ -179,6 +179,32 @@ static void kpm_fp_unwrap_syscalln(int nr, void *before, void *after)
     hook_unwrap(kpm_sys_call_table[nr], before, after);
 }
 
+/*
+ * KernelPatch's inline_wrap_syscalln hooks the syscall function itself (as
+ * opposed to the sys_call_table slot that fp_wrap_syscalln targets). On this
+ * fork we only have one hook engine (hook_wrap), so inline_* and fp_* end up
+ * at the same target: sys_call_table[nr]. Matches lkm/kpm/symbols.c upstream.
+ * The is_compat arg is accepted but ignored (arm64 GKI has no compat table).
+ */
+static int kpm_inline_wrap_syscalln(int nr, int narg, int is_compat,
+                                    void *before, void *after, void *udata)
+{
+    (void)is_compat;
+    if (kpm_resolve_sys_call_table())
+        return -ENOENT;
+    /* has_syscall_wrapper is always true on arm64 GKI: syscall takes pt_regs. */
+    return hook_wrap(kpm_sys_call_table[nr], 1, before, after, udata);
+}
+
+static void kpm_inline_unwrap_syscalln(int nr, int is_compat,
+                                       void *before, void *after)
+{
+    (void)is_compat;
+    if (kpm_resolve_sys_call_table())
+        return;
+    hook_unwrap(kpm_sys_call_table[nr], before, after);
+}
+
 struct CompactAddressSymbol {
     const char *symbol_name;
     void *addr;
@@ -210,9 +236,53 @@ static struct CompactAddressSymbol address_symbol[] = {
     { "has_syscall_wrapper", &kpm_has_syscall_wrapper },
     { "hook_wrap", &hook_wrap },
     { "unhook", &unhook },
+    { "hook_unwrap_remove", &hook_unwrap_remove },
     { "fp_wrap_syscalln", &kpm_fp_wrap_syscalln },
     { "fp_unwrap_syscalln", &kpm_fp_unwrap_syscalln },
+    { "inline_wrap_syscalln", &kpm_inline_wrap_syscalln },
+    { "inline_unwrap_syscalln", &kpm_inline_unwrap_syscalln },
 };
+
+/*
+ * KernelPatch exposes a handful of integer-valued "symbols" (not functions,
+ * not pointers) that describe the running kernel's layout — thread_size,
+ * task_in_thread_info_offset, sp_el0_is_current, etc. KPMs reference these
+ * as `extern int foo;` and the compiler emits `movz Xn, #G0; movk Xn, G1`
+ * reloc pairs (R_AARCH64_MOVW_UABS_G*_NC) that bake the symbol VALUE
+ * directly into the instruction stream.
+ *
+ * These need st_value = the raw integer value, NOT a slot pointer and NOT a
+ * function address. GKI arm64 is always CONFIG_THREAD_INFO_IN_TASK, so sp_el0
+ * holds `current` (struct task_struct *) directly and thread_info lives at
+ * task offset 0; task_in_thread_info_offset is then just 0.
+ */
+struct CompactValueSymbol {
+    const char *symbol_name;
+    unsigned long value;
+};
+
+static struct CompactValueSymbol value_symbol[] = {
+    { "thread_size", 16384 },               /* THREAD_SIZE on arm64 GKI */
+    { "thread_info_in_task", 1 },           /* GKI arm64 */
+    { "sp_el0_is_current", 1 },             /* GKI arm64 */
+    { "sp_el0_is_thread_info", 0 },
+    { "task_in_thread_info_offset", 0 },    /* task IS the thread_info container */
+    { "stack_in_task_offset", 0 },
+    { "stack_end_offset", 16 },             /* thread_info has 2 u64 then stack */
+};
+
+bool sukisu_compact_find_value(const char *name, unsigned long *out_value)
+{
+    size_t i;
+    for (i = 0; i < ARRAY_SIZE(value_symbol); i++) {
+        if (!strcmp(name, value_symbol[i].symbol_name)) {
+            *out_value = value_symbol[i].value;
+            return true;
+        }
+    }
+    return false;
+}
+EXPORT_SYMBOL(sukisu_compact_find_value);
 
 unsigned long sukisu_compact_find_symbol(const char *name)
 {

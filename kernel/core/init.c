@@ -136,11 +136,11 @@ int __init kernelsu_init(void)
 
     ksu_init_symbol_resolver();
 
-    /* KernelPatch inline-hook runtime: must resolve module_alloc / set_memory_x
-     * from kallsyms before any KPM calls hook_wrap(). Non-fatal on failure —
-     * KPMs that don't use inline-hook (e.g. demo-hello) still load. */
-    if (kp_hook_runtime_init())
-        pr_warn("kpm: hook runtime init failed; inline-hook KPMs will not load\n");
+    /* KernelPatch inline-hook runtime is stubbed out at the moment (see
+     * kernel/kpm/compact.c kpm_hook_wrap_stub); no point initializing its
+     * module_alloc/set_memory_x lookups until the inline-hook panic is
+     * diagnosed. Re-enable with kp_hook_runtime_init() when the stubs are
+     * switched back to the real hook_wrap. */
 
     if (spoof_release || spoof_version) {
         ksu_spoof_version(spoof_release, spoof_version);

@@ -139,56 +139,50 @@ static int kpm_has_syscall_wrapper(void)
 }
 
 /*
- * Inline-hook runtime wiring. hook_wrap / unhook live in the ported
- * KernelPatch base kernel/kpm/kphook/hook.c (included via hook_engine.c).
- * KPMs also ask for fp_wrap_syscalln / fp_unwrap_syscalln as separate UND
- * symbols; the LKM port maps them onto hook_wrap(sys_call_table[nr]) —
- * same approach as bmax121/KernelPatch's lkm/kpm/symbols.c.
+ * Inline-hook runtime stubs.
+ *
+ * We ported bmax121/KernelPatch's hook.c + hook_runtime.c under
+ * kernel/kpm/kphook/ and that build links fine. But calling hook_wrap()
+ * from a KPM at runtime triggers a non-recoverable panic (device
+ * PS_HOLD-resets, ramoops captures nothing on this phone, so no stack).
+ * Suspected root cause is kCFI type-hash mismatch on the KPM->ko blr x8
+ * indirect call, since KPMs compile their own view of hook_wrap's
+ * signature and never see the ko's kCFI preface — but we can't confirm
+ * until we can get a crash trace.
+ *
+ * Until the panic is diagnosed, expose hook_wrap/unhook as -ENOSYS stubs
+ * so inline-hook KPMs fail the load cleanly instead of killing the
+ * kernel. KPMs that only need the string/memory/uid shims (demo-hello
+ * and friends) still work.
  */
-#include "kphook/include/hook.h"
-#include "kphook/hook_runtime.h"
-
-static void **kpm_sys_call_table;
-
-static int kpm_resolve_sys_call_table(void)
+__attribute__((no_sanitize("cfi")))
+static int kpm_hook_wrap_stub(void *func, int32_t argno, void *before,
+                              void *after, void *udata)
 {
-    if (!kpm_sys_call_table)
-        kpm_sys_call_table = (void **)find_kernel_symbol_exact("sys_call_table");
-    return kpm_sys_call_table ? 0 : -ENOENT;
+    (void)func; (void)argno; (void)before; (void)after; (void)udata;
+    pr_warn_ratelimited("kpm: hook_wrap() stub hit; inline-hook not wired up yet\n");
+    return -ENOSYS;
 }
 
-#include <linux/delay.h>
+__attribute__((no_sanitize("cfi")))
+static void kpm_unhook_stub(void *func)
+{
+    (void)func;
+}
 
+__attribute__((no_sanitize("cfi")))
 static int kpm_fp_wrap_syscalln(int nr, int narg, void *before, void *after,
                                 void *udata)
 {
-    int rc;
-    pr_emerg("kpm: fp_wrap_syscalln enter nr=%d narg=%d before=%px after=%px\n",
-             nr, narg, before, after);
-    mdelay(50);
-    if (kpm_resolve_sys_call_table()) {
-        pr_emerg("kpm: fp_wrap_syscalln sys_call_table=NULL\n");
-        mdelay(50);
-        return -ENOENT;
-    }
-    pr_emerg("kpm: fp_wrap_syscalln table=%px target=%px calling hook_wrap\n",
-             kpm_sys_call_table, kpm_sys_call_table[nr]);
-    mdelay(50);
-    rc = hook_wrap(kpm_sys_call_table[nr], narg, before, after, udata);
-    pr_emerg("kpm: fp_wrap_syscalln returned rc=%d\n", rc);
-    mdelay(50);
-    return rc;
+    (void)nr; (void)narg; (void)before; (void)after; (void)udata;
+    pr_warn_ratelimited("kpm: fp_wrap_syscalln() stub hit; inline-hook not wired up yet\n");
+    return -ENOSYS;
 }
 
+__attribute__((no_sanitize("cfi")))
 static void kpm_fp_unwrap_syscalln(int nr, void *before, void *after)
 {
-    pr_emerg("kpm: fp_unwrap_syscalln enter nr=%d\n", nr);
-    mdelay(50);
-    if (kpm_resolve_sys_call_table())
-        return;
-    hook_unwrap(kpm_sys_call_table[nr], before, after);
-    pr_emerg("kpm: fp_unwrap_syscalln returned\n");
-    mdelay(50);
+    (void)nr; (void)before; (void)after;
 }
 
 struct CompactAddressSymbol {
@@ -220,8 +214,8 @@ static struct CompactAddressSymbol address_symbol[] = {
     { "kf_strlen", &kpm_kf_strlen },
     { "current_uid", &kpm_current_uid },
     { "has_syscall_wrapper", &kpm_has_syscall_wrapper },
-    { "hook_wrap", &hook_wrap },
-    { "unhook", &unhook },
+    { "hook_wrap", &kpm_hook_wrap_stub },
+    { "unhook", &kpm_unhook_stub },
     { "fp_wrap_syscalln", &kpm_fp_wrap_syscalln },
     { "fp_unwrap_syscalln", &kpm_fp_unwrap_syscalln },
 };

@@ -3,8 +3,6 @@
  * Copyright (C) 2023 bmax121. All Rights Reserved.
  */
 
-#include <linux/delay.h>
-#include <linux/printk.h>
 #include "include/hook.h"
 #include "include/io.h"
 #include "include/symbol.h"
@@ -747,18 +745,13 @@ KP_EXPORT_SYMBOL(hook_chain_remove);
 // todo: lock
 hook_err_t hook_wrap(void *func, int32_t argno, void *before, void *after, void *udata)
 {
-    pr_emerg("kpm:hook_wrap enter func=%px argno=%d\n", func, argno); mdelay(50);
-    if (is_bad_address(func)) { pr_emerg("kpm:hook_wrap bad func\n"); mdelay(50); return -HOOK_BAD_ADDRESS; }
+    if (is_bad_address(func)) return -HOOK_BAD_ADDRESS;
     uint64_t faddr = (uint64_t)func;
-    pr_emerg("kpm:hook_wrap pre branch_func_addr faddr=%llx\n", faddr); mdelay(50);
     uint64_t origin = branch_func_addr(faddr);
-    pr_emerg("kpm:hook_wrap post branch_func_addr origin=%llx\n", origin); mdelay(50);
     if (is_bad_address(func)) return -HOOK_BAD_ADDRESS;
     hook_chain_t *chain = (hook_chain_t *)hook_get_mem_from_origin(origin);
-    if (chain) { pr_emerg("kpm:hook_wrap reuse chain\n"); mdelay(50); return hook_chain_add(chain, before, after, udata); }
-    pr_emerg("kpm:hook_wrap hook_mem_zalloc enter\n"); mdelay(50);
+    if (chain) return hook_chain_add(chain, before, after, udata);
     chain = (hook_chain_t *)hook_mem_zalloc(origin, INLINE_CHAIN);
-    pr_emerg("kpm:hook_wrap hook_mem_zalloc done chain=%px\n", chain); mdelay(50);
     if (!chain) return -HOOK_NO_MEM;
     chain->chain_items_max = 0;
     hook_t *hook = &chain->hook;
@@ -766,22 +759,20 @@ hook_err_t hook_wrap(void *func, int32_t argno, void *before, void *after, void 
     hook->origin_addr = origin;
     hook->replace_addr = (uint64_t)chain->transit;
     hook->relo_addr = (uint64_t)hook->relo_insts;
-    pr_emerg("kpm:hook_wrap pre hook_prepare\n"); mdelay(50);
+    logkv("Wrap func: %llx, origin: %llx, replace: %llx, relocate: %llx, chain: %llx\n", hook->func_addr,
+          hook->origin_addr, hook->replace_addr, hook->relo_addr, (uint64_t)chain);
     hook_err_t err = hook_prepare(hook);
-    pr_emerg("kpm:hook_wrap post hook_prepare err=%d\n", err); mdelay(50);
     if (err) goto err;
     err = hook_chain_prepare(chain->transit, argno);
-    pr_emerg("kpm:hook_wrap post hook_chain_prepare err=%d\n", err); mdelay(50);
     if (err) goto err;
     err = hook_chain_add(chain, before, after, udata);
-    pr_emerg("kpm:hook_wrap post hook_chain_add err=%d\n", err); mdelay(50);
     if (err) goto err;
-    pr_emerg("kpm:hook_wrap pre hook_chain_install\n"); mdelay(50);
     hook_chain_install(chain);
-    pr_emerg("kpm:hook_wrap post hook_chain_install\n"); mdelay(50);
+    logkv("Wrap func: %llx succsseed\n", hook->func_addr);
     return HOOK_NO_ERR;
 err:
     hook_mem_free(chain);
+    logkv("Wrap func: %llx failed, err: %d\n", hook->func_addr, err);
     return err;
 }
 KP_EXPORT_SYMBOL(hook_wrap);

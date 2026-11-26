@@ -255,24 +255,99 @@ static bool is_core_symbol(const Elf_Sym *src, const Elf_Shdr *sechdrs, unsigned
 }
 
 /*
- * KP symbol model: kpm code references kernel symbols as pointer
- * VARIABLES (headers declare `extern void (*printk)(...)`), emitting
- * `adrp xN, sym; ldr x8,[xN..]; blr x8`. The symbol value must therefore
- * be a memory slot holding the real address, not the function body.
- * Slots were pre-carved at the tail of the module image by the caller
- * (must be within ADRP's +/-4GB of the code).
+ * KPMs reference kernel symbols in TWO styles that need different link-time
+ * treatment, and the loader has to tell them apart by looking at HOW each
+ * UND symbol is used:
+ *
+ *   A. Pointer-variable form. The KPM header declares the symbol as a
+ *      pointer variable (`extern void (*printk)(...)`), and the compiler
+ *      emits `adrp xN, sym; ldr x8, [xN, #lo12]; blr x8` — i.e. GOT-style
+ *      access. Reloc types are 311/323/264/266/268/269 etc. (any ADRP /
+ *      LDR_LO12 pair touching the UND sym). For this form, st_value must
+ *      point at a MEMORY SLOT that holds the real address, and the slot
+ *      has to sit within +/-4GB of the code (we pre-carve one at the tail
+ *      of the module image).
+ *
+ *   B. Direct-function form. The header declares the symbol as a plain
+ *      function (`hook_err_t hook_wrap(void *, int32_t, ...)`), so the
+ *      compiler emits a direct `BL sym` with `R_AARCH64_CALL26` /
+ *      `R_AARCH64_JUMP26`. For this form, st_value must be the REAL
+ *      function entry: the BL immediate is a PC-relative branch straight
+ *      to the callee. Routing it through a slot address would make the
+ *      CPU execute the raw slot bytes as code (we previously crashed
+ *      exactly this way: "Oops - Undefined instruction" with the Code
+ *      line showing the slot pointer bytes).
+ *
+ * unlink.kpm mixes both — hook_wrap/unhook/fp_wrap_syscalln/current_uid/
+ * compat_copy_to_user are CALL26, while printk/kf_memcpy/kallsyms_lookup_name
+ * are GOT-form. The direct branch's +/-128MB range is fine because both
+ * the KPM image (module_alloc) and the ko that defines the targets live
+ * in the kernel module vmap, so they are within reach.
+ *
+ * We do a cheap pre-pass over every .rela.* belonging to the kpm to
+ * record which UND symbol indices are touched by CALL26/JUMP26, then
+ * simplify_symbols routes those to raw addresses instead of slots.
  */
+#ifndef R_AARCH64_JUMP26
+#define R_AARCH64_JUMP26 282
+#endif
+#ifndef R_AARCH64_CALL26
+#define R_AARCH64_CALL26 283
+#endif
+
+static int collect_call26_syms(const struct kpm_load_info *info,
+                               unsigned long *bitmap, unsigned int nsym)
+{
+    unsigned int i;
+    for (i = 1; i < info->hdr->e_shnum; i++) {
+        const Elf_Shdr *sh = &info->sechdrs[i];
+        unsigned int infosec = sh->sh_info;
+        const Elf_Rela *r;
+        unsigned int n, k;
+
+        if (sh->sh_type != SHT_RELA)
+            continue;
+        if (sh->sh_link != info->index.sym)
+            continue;
+        if (infosec >= info->hdr->e_shnum)
+            continue;
+        if (!(info->sechdrs[infosec].sh_flags & SHF_ALLOC))
+            continue;
+
+        r = (const Elf_Rela *)((const char *)info->hdr + sh->sh_offset);
+        n = sh->sh_size / sizeof(*r);
+        for (k = 0; k < n; k++) {
+            unsigned long t = ELF64_R_TYPE(r[k].r_info);
+            unsigned long si = ELF64_R_SYM(r[k].r_info);
+            if (si >= nsym)
+                continue;
+            if (t == R_AARCH64_CALL26 || t == R_AARCH64_JUMP26)
+                bitmap[si / BITS_PER_LONG] |= 1UL << (si % BITS_PER_LONG);
+        }
+    }
+    return 0;
+}
+
 static int simplify_symbols(struct kpm_module *mod, struct kpm_load_info *info)
 {
     Elf_Shdr *symsec = &info->sechdrs[info->index.sym];
     Elf_Sym *sym = (void *)symsec->sh_addr;
+    unsigned int nsym = symsec->sh_size / sizeof(Elf_Sym);
     unsigned long secbase;
+    unsigned long *call26;
     unsigned int i;
     int ret = 0;
     unsigned long addr = 0;
 
-    for (i = 1; i < symsec->sh_size / sizeof(Elf_Sym); i++) {
+    call26 = kcalloc(BITS_TO_LONGS(nsym), sizeof(unsigned long), GFP_KERNEL);
+    if (!call26)
+        return -ENOMEM;
+    collect_call26_syms(info, call26, nsym);
+
+    for (i = 1; i < nsym; i++) {
         const char *name = info->strtab + sym[i].st_name;
+        bool want_direct;
+
         switch (sym[i].st_shndx) {
         case SHN_COMMON:
             if (!strncmp(name, "__gnu_lto", 9)) {
@@ -291,6 +366,17 @@ static int simplify_symbols(struct kpm_module *mod, struct kpm_load_info *info)
                 ret = -ENOENT;
                 break;
             }
+            want_direct = !!(call26[i / BITS_PER_LONG] &
+                             (1UL << (i % BITS_PER_LONG)));
+            if (want_direct) {
+                /* Reached only by BL imm26: KPM expects to branch to the
+                 * real function entry. Do not route through a slot, or the
+                 * CPU will execute the slot contents as code. */
+                sym[i].st_value = addr;
+                pr_info("kpm: symbol %s (CALL26) -> %px\n", name,
+                        (void *)addr);
+                break;
+            }
             if (!info->ptr_slots || info->slot_used >= info->n_slots) {
                 ret = -ENOMEM;
                 break;
@@ -306,7 +392,10 @@ static int simplify_symbols(struct kpm_module *mod, struct kpm_load_info *info)
             sym[i].st_value += secbase;
             break;
         }
+        if (ret)
+            break;
     }
+    kfree(call26);
     return ret;
 }
 

@@ -3,8 +3,7 @@
  * Copyright (C) 2023 bmax121. All Rights Reserved.
  */
 
-#include "hook.h"
-
+#include "include/hook.h"
 #include "include/stdint.h"
 
 static uint64_t mem_region_start = 0;

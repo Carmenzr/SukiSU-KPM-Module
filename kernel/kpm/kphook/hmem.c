@@ -5,7 +5,7 @@
 
 #include "hook.h"
 
-#include <stdint.h>
+#include "include/stdint.h"
 
 static uint64_t mem_region_start = 0;
 static uint64_t mem_region_end = 0;

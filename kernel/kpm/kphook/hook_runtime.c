@@ -11,7 +11,7 @@
 
 #include "include/kp_lkm.h"
 #include "include/kp_adapt.h"
-#include <hook.h>
+#include "include/hook.h"
 
 struct kp_hook_mem {
 	struct list_head list;

@@ -3,12 +3,12 @@
  * Copyright (C) 2023 bmax121. All Rights Reserved.
  */
 
-#include <hook.h>
-#include <io.h>
-#include <symbol.h>
-#include <pgtable.h>
-#include <hotpatch.h>
-#include <kpmalloc.h>
+#include "include/hook.h"
+#include "include/io.h"
+#include "include/symbol.h"
+#include "include/pgtable.h"
+#include "include/hotpatch.h"
+#include "include/kpmalloc.h"
 #include "hmem.h"
 
 #define bits32(n, high, low) ((uint32_t)((n) << (31u - (high))) >> (31u - (high) + (low)))

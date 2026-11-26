@@ -6,8 +6,11 @@
 #ifndef _KP_HOOK_H_
 #define _KP_HOOK_H_
 
-#include <stdint.h>
-#include <log.h>
+/* LKM port: these were <angled> in upstream; the kernel build has
+ * -nostdinc with a fixed LINUXINCLUDE, so ccflags -I never reaches the
+ * angled search path. Use "quoted" so they come from the local shim dir. */
+#include "stdint.h"
+#include "log.h"
 
 #define HOOK_INTO_BRANCH_FUNC
 

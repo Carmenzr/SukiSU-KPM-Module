@@ -316,9 +316,16 @@ struct kpm_ext_entry {
 };
 
 /* Extensions this kernel advertises to a 4.3.0 manager. KPM is real; the
- * others are lightweight handlers so the manager can offer their pages. */
+ * others are lightweight handlers so the manager can offer their pages.
+ *
+ * id=1 cpu_spoof and id=2 umount_paths both have real ioctls elsewhere
+ * (SET_SPOOF_CPU 'K'/105, ADD_TRY_UMOUNT 'K'/18); they just need an enum
+ * entry here so the Ultra 4.3.0 manager stops drawing the pages as
+ * "not supported" and lets the user interact with them. */
 static const struct kpm_ext_entry kpm_ext_entries[] = {
     { 0, "kpm" },
+    { 1, "cpu_spoof" },
+    { 2, "umount_paths" },
     { 3, "dynamic_manager" },
     { 4, "susfs" },
     { 5, "version_spoof" },
@@ -377,7 +384,24 @@ int do_extension(void __user *arg)
     if (ext.op == KSU_EXTENSION_GET) {
         ext.supported = 1;
         ext.api_version = KSU_EXTENSION_API_VERSION;
-        ext.value = (ext.id == 4) ? 1 : 0; /* susfs: present via guard LKM */
+        /* value: 0/1 "feature present+enabled" bit the manager renders.
+         *   susfs(4): wired through the guard LKM.
+         *   cpu_spoof(1), umount_paths(2): the kernel has their IOCTLs
+         *     (SET_SPOOF_CPU, ADD_TRY_UMOUNT) and the pages should offer
+         *     their controls. We report "present" and let the per-page
+         *     ioctl path decide what's actually in effect.
+         *   kpm(0), dynamic_manager(3), version_spoof(5): existing
+         *     behaviour — 0. */
+        switch (ext.id) {
+        case 1:
+        case 2:
+        case 4:
+            ext.value = 1;
+            break;
+        default:
+            ext.value = 0;
+            break;
+        }
         return copy_to_user(arg, &ext, sizeof(ext)) ? -EFAULT : 0;
     }
 
